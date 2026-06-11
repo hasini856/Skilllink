@@ -1,4 +1,4 @@
-import User from '../models/user.model.js';
+import User from '../models/User.model.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
@@ -58,14 +58,12 @@ export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // validate input
     if (!email || !password) {
       return res.status(400).json({
         message: 'Email and password required',
       });
     }
 
-    // IMPORTANT FIX: include password explicitly
     const user = await User.findOne({ email }).select('+password');
 
     if (!user) {
@@ -74,7 +72,6 @@ export const login = async (req, res) => {
       });
     }
 
-    // safety check
     if (!user.password) {
       return res.status(500).json({
         message: 'Password missing in database',
@@ -100,7 +97,6 @@ export const login = async (req, res) => {
         role: user.role,
       },
     });
-
   } catch (err) {
     console.error('LOGIN ERROR:', err);
     return res.status(500).json({
@@ -108,6 +104,7 @@ export const login = async (req, res) => {
     });
   }
 };
+
 // ======================
 // GET ME
 // ======================
