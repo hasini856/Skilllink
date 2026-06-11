@@ -3,7 +3,12 @@ import { io } from "socket.io-client";
 import { api } from "../services/api.js";
 import { Link } from "react-router-dom";
 
-const socket = io("http://localhost:5000");
+const BASE_URL = "https://skilllink-backend-nv4w.onrender.com";
+
+// ✅ FIXED SOCKET (NO localhost)
+const socket = io(BASE_URL, {
+  withCredentials: true,
+});
 
 function NotificationBell() {
   const [requests, setRequests] = useState([]);
@@ -33,7 +38,7 @@ function NotificationBell() {
   return (
     <div className="relative">
       <button onClick={() => setOpen(!open)}>
-        🔔 {requests.filter(r => r.status === "pending").length}
+        🔔 {requests.filter((r) => r.status === "pending").length}
       </button>
 
       {open && (
@@ -42,7 +47,7 @@ function NotificationBell() {
             View All
           </Link>
 
-          {requests.map(r => (
+          {requests.map((r) => (
             <div key={r._id} className="p-2 border-b">
               <p className="font-bold">{r.learner?.name}</p>
               <p className="text-sm">{r.message}</p>
