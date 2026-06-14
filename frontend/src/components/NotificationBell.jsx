@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 import { api } from "../services/api.js";
 import { Link } from "react-router-dom";
 
-const BASE_URL = "https://skilllink-backend-nv4w.onrender.com";
+const BASE_URL = "http://localhost:5000";
 
 // ✅ FIXED SOCKET (NO localhost)
 const socket = io(BASE_URL, {

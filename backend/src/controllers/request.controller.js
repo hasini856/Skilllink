@@ -1,74 +1,156 @@
 import Request from "../models/Request.js";
-import Notification from "../models/Notification.js";
-import Chat from "../models/Chat.js";
-import { getIO } from "../socket/socket.js";
+
+// ================= MATCH SCORE FUNCTION =================
+const calculateMatchScore = (mentor, learner) => {
+  let score = 0;
+
+  const mentorSkills = mentor?.skills || [];
+  const learnerSkills = learner?.interests || [];
+
+  // 🔥 1. SKILL MATCH (50 points)
+  const skillMatches = mentorSkills.filter((skill) =>
+    learnerSkills.includes(skill)
+  );
+
+  const skillScore =
+    mentorSkills.length > 0
+      ? (skillMatches.length / mentorSkills.length) * 50
+      : 0;
+
+  score += skillScore;
+
+  // 🔥 2. EXPERIENCE (20 points)
+  const exp = mentor?.experience || 0;
+
+  if (exp >= 5) score += 20;
+  else if (exp >= 3) score += 15;
+  else if (exp >= 1) score += 10;
+
+  // 🔥 3. INTEREST ALIGNMENT (20 points)
+  const interestMatches = learnerSkills.filter((i) =>
+    mentorSkills.includes(i)
+  );
+
+  const interestScore =
+    learnerSkills.length > 0
+      ? (interestMatches.length / learnerSkills.length) * 20
+      : 0;
+
+  score += interestScore;
+
+  // 🔥 4. BONUS (10 points)
+  if (skillMatches.length > 0) {
+    score += 10;
+  }
+
+  return Math.min(Math.round(score), 100);
+};
 
 // ================= SEND REQUEST =================
 export const sendRequest = async (req, res) => {
   try {
-    const { mentorId, topic, message } = req.body;
+    const { mentorId, message } = req.body;
 
-    const request = await Request.create({
-      learner: req.user._id,
+    // Check if request already exists
+    const existingRequest = await Request.findOne({
       mentor: mentorId,
-      topic,
-      message,
+      learner: req.user._id,
     });
 
-    const notification = await Notification.create({
-      receiver: mentorId,
-      sender: req.user._id,
-      senderName: req.user.name,
-      type: "request",
+    if (existingRequest) {
+      return res.status(400).json({ message: "Request already sent" });
+    }
+
+    const request = new Request({
+      mentor: mentorId,
+      learner: req.user._id,
       message,
       status: "pending",
     });
 
-    getIO()
-      .to(String(mentorId))
-      .emit("new-session-request", notification);
+    await request.save();
 
-    res.json({
-      success: true,
-      request,
-    });
+    res.json({ request });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
+// ================= GET REQUESTS =================
+export const getMyRequests = async (req, res) => {
+  try {
+    const requests = await Request.find({
+      $or: [
+        { mentor: req.user._id },
+        { learner: req.user._id }
+      ]
+    }).populate("mentor learner");
+
+    const enriched = requests.map((r) => {
+      const mentor = r.mentor;
+      const learner = r.learner;
+
+      let matchScore = 50;
+
+      const mentorSkills = mentor?.skills || [];
+      const learnerSkills = learner?.interests || [];
+
+      const common = mentorSkills.filter(s =>
+        learnerSkills.includes(s)
+      );
+
+      matchScore += common.length * 10;
+
+      if ((mentor?.experience || 0) >= 3) {
+        matchScore += 10;
+      }
+
+      return {
+        _id: r._id,
+        status: r.status,
+        message: r.message,
+        mentor,
+        learner,
+        roomId: r.roomId || null,
+        matchScore: Math.min(matchScore, 100),
+      };
+    });
+
+    res.json({ requests: enriched });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 // ================= ACCEPT REQUEST =================
 export const acceptRequest = async (req, res) => {
   try {
     const request = await Request.findById(req.params.id);
 
     if (!request) {
-      return res.status(404).json({ message: "Request not found" });
+      return res.status(404).json({ message: "Not found" });
     }
 
+    // 🔥 CREATE ROOM ONLY HERE
+    const roomId = [request.mentor, request.learner]
+      .map((id) => id.toString())
+      .sort()
+      .join("_");
+
     request.status = "accepted";
+    request.roomId = roomId;
+
     await request.save();
 
-    const chat = await Chat.create({
-      users: [request.learner, request.mentor],
-    });
-
-    const notification = await Notification.create({
-      receiver: request.learner,
-      sender: request.mentor,
-      type: "accepted",
-      chatId: chat._id,
-      message: "Your mentorship request was accepted",
-    });
-
-    getIO()
-      .to(String(request.learner))
-      .emit("request-accepted", notification);
-
     res.json({
-      success: true,
-      chatId: chat._id,
+      request: {
+        _id: request._id,
+        status: request.status,
+        roomId: request.roomId,
+      },
+      roomId,
     });
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -80,45 +162,14 @@ export const rejectRequest = async (req, res) => {
     const request = await Request.findById(req.params.id);
 
     if (!request) {
-      return res.status(404).json({ message: "Request not found" });
+      return res.status(404).json({ message: "Not found" });
     }
 
     request.status = "rejected";
     await request.save();
 
-    const notification = await Notification.create({
-      receiver: request.learner,
-      sender: request.mentor,
-      type: "rejected",
-      message: "Your mentorship request was rejected",
-    });
+    res.json({ request });
 
-    getIO()
-      .to(String(request.learner))
-      .emit("request-rejected", notification);
-
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ================= GET MY REQUESTS =================
-export const getMyRequests = async (req, res) => {
-  try {
-    const userId = req.user._id;
-
-    const requests = await Request.find({
-      $or: [{ mentor: userId }, { learner: userId }],
-    })
-      .populate("learner", "name email")
-      .populate("mentor", "name email")
-      .sort({ createdAt: -1 });
-
-    res.json({
-      success: true,
-      requests,
-    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

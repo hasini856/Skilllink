@@ -2,44 +2,30 @@ import mongoose from "mongoose";
 
 const requestSchema = new mongoose.Schema(
   {
-    learner: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-
     mentor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-
-    topic: {
-      type: String,
-      default: "Mentorship",
+    learner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
-
-    message: {
-      type: String,
-      default: "",
-    },
+    message: String,
 
     status: {
       type: String,
-      enum: [
-        "pending",
-        "accepted",
-        "rejected",
-      ],
+      enum: ["pending", "accepted", "rejected"],
       default: "pending",
     },
+
+    roomId: {
+      type: String,
+      default: null,
+    },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-export default mongoose.model(
-  "Request",
-  requestSchema
-);
+export default mongoose.model("Request", requestSchema);
